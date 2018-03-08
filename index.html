@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>JS图像识别</title>
+</head>
+<body>
+    <img src="http://p.pstatp.com/avatar/100x100/1dd5000048d6334c26b4.png" crossorigin="anonymous" id="some_image">
+    <input type="button" id="test" value="识别车的logo" >
+
+    <script src="./convnet-min.js"></script>
+    <script src="./car.js"></script>
+    <script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
+    <script>
+        let layer_defs = [];
+        let imageList = [];
+
+        const net = new convnetjs.Net();
+        //构建层
+        //图片的宽度和高度，要与待识别的图意志哦，本例是100X100
+        layer_defs.push({type:'input', out_sx:100, out_sy:100, out_depth:1}); 
+        layer_defs.push({type:'conv', sx:5, filters:16, stride:1, pad:2, activation:'relu'});
+        layer_defs.push({type:'pool', sx:2, stride:2});
+        layer_defs.push({type:'conv', sx:5, filters:20, stride:1, pad:2, activation:'relu'});
+        layer_defs.push({type:'pool', sx:2, stride:2});
+        layer_defs.push({type:'conv', sx:5, filters:20, stride:1, pad:2, activation:'relu'});
+        layer_defs.push({type:'pool', sx:2, stride:2});
+        layer_defs.push({type:'softmax', num_classes:10});
+        net.makeLayers(layer_defs);
+
+        //训练层，图像识别的特定的参数
+        const trainer = new convnetjs.SGDTrainer(net, {method:'adadelta', batch_size:5, l2_decay:0.001});
+        // trainer.train(x, 0); 
+        
+        //把img图片放到imageList数组中
+        for(var i=0; i<carList.length;i++){
+            imageList.push(loadImg(i));
+        }
+        
+        //训练模型，返回一个函数，
+        function loadImg(i){
+            return function(){
+                return new Promise(function(resolve,reject){
+                    let image = new Image();
+                    image.crossOrigin = "Anonymous";//跨域
+                    image.src = carList[i].url;
+                    //加载成功，进行转换，并训练
+                    image.onload = function(){
+                        let vol = convnetjs.img_to_vol(image);
+                        trainer.train(vol,i);
+                        resolve();
+                    };
+                    image.onerror = reject;
+                })
+            }
+        };
+
+        //给按钮绑定事件
+        $("#test").click(function(){
+            const carNameList = ["奥迪","阿尔法-罗密欧","阿斯顿 马丁","AC Schnitzer","ALPINA","安凯客车"];
+            //训练模型--遍历imagelist中的promise，对象都是函数，执行后返回Promise训练后的结果
+            Promise.all(imageList.map(imageContainer=>imageContainer())).then(function(){
+                //拿到页面上的图片进行识别
+                const test = convnetjs.img_to_vol(document.getElementById("some_image"));
+                //把结果放到result数组中，一群0-1的小数放在里面
+                let result = Array.from(net.forward(test).w);
+                //找到数组中值最大的那个，他的索引就是对应的车牌的索引哦
+                let max = Math.max.apply(Math,result);
+                console.log("这个汽车logo可能是：" + carNameList[result.indexOf(max)]);
+            });
+
+        });
+
+    </script>
+</body>
+</html>
